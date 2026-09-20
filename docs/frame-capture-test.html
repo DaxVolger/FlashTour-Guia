@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Teste de captura exata de frame</title>
+  <style>
+    :root { color-scheme: dark; --bg:#101318; --panel:#191e27; --line:#303948; --muted:#9ba7b8; --accent:#33d17a; --accent-2:#45aaf2; }
+    * { box-sizing: border-box; }
+    body { margin:0; min-height:100vh; font-family:Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background:radial-gradient(circle at 50% -10%, #243344, var(--bg) 52%); color:#f4f7fb; }
+    main { width:min(980px, calc(100% - 32px)); margin:32px auto 56px; }
+    h1 { margin:0 0 8px; font-size:clamp(1.35rem, 3vw, 2rem); letter-spacing:-.02em; }
+    .intro { color:var(--muted); margin:0 0 22px; }
+    .card { background:rgba(25,30,39,.94); border:1px solid var(--line); border-radius:16px; padding:18px; box-shadow:0 18px 50px #0004; }
+    .source { display:flex; flex-wrap:wrap; gap:12px; align-items:center; margin-bottom:16px; }
+    input[type=file] { max-width:100%; color:var(--muted); }
+    .hint { font-size:.86rem; color:var(--muted); }
+    .video-wrap { position:relative; overflow:hidden; background:#05070a; border-radius:10px; min-height:180px; display:grid; place-items:center; }
+    video { display:block; width:100%; max-height:64vh; background:#05070a; }
+    .empty { position:absolute; color:#7e8a9b; text-align:center; padding:24px; pointer-events:none; }
+    .controls { display:grid; grid-template-columns:auto 1fr auto; gap:12px; align-items:center; margin-top:12px; }
+    button { border:0; border-radius:9px; padding:12px 16px; font-weight:800; letter-spacing:.02em; cursor:pointer; color:#06130c; background:var(--accent); transition:filter .15s, transform .05s; }
+    button:hover { filter:brightness(1.08); } button:active { transform:translateY(1px); } button:disabled { cursor:not-allowed; opacity:.45; filter:none; }
+    #capture { width:100%; margin-top:16px; background:#ffb74d; color:#1f1303; font-size:1rem; }
+    input[type=range] { width:100%; accent-color:var(--accent-2); cursor:pointer; }
+    .time-readout { color:var(--muted); font-variant-numeric:tabular-nums; white-space:nowrap; }
+    .result { margin-top:24px; display:grid; grid-template-columns:minmax(0, 1fr) minmax(240px, 330px); gap:20px; align-items:start; }
+    .label { display:block; color:var(--muted); font-size:.78rem; text-transform:uppercase; letter-spacing:.1em; margin-bottom:7px; }
+    .timecode { font:700 clamp(1.35rem, 4vw, 2rem)/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; color:var(--accent); font-variant-numeric:tabular-nums; }
+    canvas { display:block; width:100%; height:auto; border-radius:9px; background:#080a0d; border:1px solid var(--line); }
+    .placeholder { aspect-ratio:16/9; display:grid; place-items:center; color:#697586; border:1px dashed var(--line); border-radius:9px; text-align:center; padding:20px; }
+    .diagnostics { margin-top:18px; padding-top:15px; border-top:1px solid var(--line); display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:7px 22px; color:#cbd5e1; font: .88rem/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .diagnostics span { color:#f4f7fb; }
+    .explain { margin-top:22px; color:var(--muted); font-size:.9rem; line-height:1.55; }
+    .status { min-height:1.35em; margin-top:10px; color:var(--muted); font-size:.88rem; }
+    @media (max-width:700px) { main { width:min(100% - 20px, 980px); margin-top:20px; } .card { padding:13px; } .controls { grid-template-columns:1fr; gap:8px; } .time-readout { text-align:right; } .result { grid-template-columns:1fr; } .diagnostics { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Teste de captura exata de frame</h1>
+    <p class="intro">Carregue um vídeo MP4, pause em qualquer posição e capture o frame atualmente exibido.</p>
+
+    <section class="card">
+      <div class="source">
+        <label for="video-file"><strong>Arquivo MP4</strong></label>
+        <input id="video-file" type="file" accept="video/mp4,video/*">
+        <span class="hint">O arquivo é processado localmente no navegador.</span>
+      </div>
+
+      <div class="video-wrap">
+        <video id="video" playsinline preload="metadata"></video>
+        <div id="empty" class="empty">Selecione um arquivo de vídeo para começar.</div>
+      </div>
+
+      <div class="controls" aria-label="Controles de reprodução">
+        <button id="play-pause" type="button" disabled>▶ Play</button>
+        <input id="seek" type="range" min="0" max="0" step="0.001" value="0" disabled aria-label="Posição do vídeo">
+        <div id="position" class="time-readout">00:00:00.000</div>
+      </div>
+
+      <button id="capture" type="button" disabled>CAPTURAR FRAME</button>
+      <div id="status" class="status" role="status">Aguardando um arquivo MP4.</div>
+
+      <div class="result">
+        <div>
+          <span class="label">Timecode da captura</span>
+          <div id="timecode" class="timecode">—</div>
+          <div class="diagnostics" aria-live="polite">
+            <div>currentTime: <span id="current-time">—</span></div>
+            <div>duration: <span id="duration">—</span></div>
+            <div>video: <span id="dimensions">—</span></div>
+            <div>estado: <span id="state">—</span></div>
+            <div>frame apresentado: <span id="presented-frame">—</span></div>
+          </div>
+        </div>
+        <div>
+          <span class="label">Frame capturado</span>
+          <div id="canvas-placeholder" class="placeholder">O frame capturado aparecerá aqui.</div>
+          <canvas id="canvas" hidden></canvas>
+        </div>
+      </div>
+
+      <p class="explain"><strong>Como funciona:</strong> no clique, o valor de <code>video.currentTime</code> é lido imediatamente e o frame já renderizado pelo elemento <code>&lt;video&gt;</code> é desenhado no <code>&lt;canvas&gt;</code>. Não há nova busca nem reposicionamento do vídeo. O <code>currentTime</code> é um número em segundos, geralmente com precisão de milissegundos ou melhor, mas a correspondência visual depende da taxa de quadros, do navegador, do codec e da precisão temporal do arquivo. Para a comparação mais controlada, pause o vídeo antes de capturar.</p>
+    </section>
+  </main>
+
+  <script>
+    (() => {
+      const video = document.querySelector('#video');
+      const fileInput = document.querySelector('#video-file');
+      const playPause = document.querySelector('#play-pause');
+      const seek = document.querySelector('#seek');
+      const position = document.querySelector('#position');
+      const capture = document.querySelector('#capture');
+      const canvas = document.querySelector('#canvas');
+      const placeholder = document.querySelector('#canvas-placeholder');
+      const empty = document.querySelector('#empty');
+      const status = document.querySelector('#status');
+      const timecode = document.querySelector('#timecode');
+      const currentTimeOut = document.querySelector('#current-time');
+      const durationOut = document.querySelector('#duration');
+      const dimensionsOut = document.querySelector('#dimensions');
+      const stateOut = document.querySelector('#state');
+      const presentedFrameOut = document.querySelector('#presented-frame');
+      let objectUrl = null;
+      let lastPresentedMediaTime = null;
+
+      const pad = (value, size) => String(value).padStart(size, '0');
+      function formatTime(seconds) {
+        if (!Number.isFinite(seconds)) return '—';
+        const totalMs = Math.max(0, Math.round(seconds * 1000));
+        const ms = totalMs % 1000;
+        const totalSeconds = Math.floor(totalMs / 1000);
+        const s = totalSeconds % 60;
+        const m = Math.floor(totalSeconds / 60) % 60;
+        const h = Math.floor(totalSeconds / 3600);
+        return `${pad(h, 2)}:${pad(m, 2)}:${pad(s, 2)}.${pad(ms, 3)}`;
+      }
+      function stateLabel() {
+        if (video.readyState < HTMLMediaElement.HAVE_METADATA) return 'sem metadados';
+        if (video.ended) return 'finalizado';
+        if (video.paused) return 'pausado';
+        return 'reproduzindo';
+      }
+      function updateUI() {
+        const current = video.currentTime;
+        position.textContent = formatTime(current);
+        currentTimeOut.textContent = Number.isFinite(current) ? `${current.toFixed(3)} s` : '—';
+        if (Number.isFinite(video.duration)) {
+          durationOut.textContent = `${video.duration.toFixed(3)} s`;
+          seek.max = video.duration;
+          seek.value = current || 0;
+        }
+        stateOut.textContent = stateLabel();
+        playPause.textContent = video.paused ? '▶ Play' : '⏸ Pause';
+      }
+      function setReady(ready) {
+        playPause.disabled = !ready;
+        seek.disabled = !ready;
+        capture.disabled = !ready;
+      }
+
+      fileInput.addEventListener('change', () => {
+        const file = fileInput.files[0];
+        if (!file) return;
+        if (objectUrl) URL.revokeObjectURL(objectUrl);
+        objectUrl = URL.createObjectURL(file);
+        video.src = objectUrl;
+        video.load();
+        empty.hidden = true;
+        canvas.hidden = true;
+        placeholder.hidden = false;
+        timecode.textContent = '—';
+        presentedFrameOut.textContent = '—';
+        status.textContent = `Arquivo carregado: ${file.name}`;
+        setReady(false);
+      });
+
+      video.addEventListener('loadedmetadata', () => {
+        dimensionsOut.textContent = `${video.videoWidth} × ${video.videoHeight}`;
+        seek.max = video.duration || 0;
+        setReady(true);
+        updateUI();
+        status.textContent = 'Pronto. Pause em uma posição e clique em “CAPTURAR FRAME”.';
+      });
+      video.addEventListener('timeupdate', updateUI);
+      video.addEventListener('play', updateUI);
+      video.addEventListener('pause', updateUI);
+      video.addEventListener('ended', updateUI);
+      video.addEventListener('error', () => {
+        setReady(false);
+        status.textContent = 'Não foi possível reproduzir este arquivo neste navegador.';
+      });
+
+      // Quando suportado, registra o último frame efetivamente apresentado pelo compositor.
+      function watchPresentedFrame(now, metadata) {
+        lastPresentedMediaTime = metadata.mediaTime;
+        if ('requestVideoFrameCallback' in HTMLVideoElement.prototype) video.requestVideoFrameCallback(watchPresentedFrame);
+      }
+      if ('requestVideoFrameCallback' in HTMLVideoElement.prototype) video.requestVideoFrameCallback(watchPresentedFrame);
+
+      playPause.addEventListener('click', async () => {
+        if (video.paused) {
+          try { await video.play(); } catch (error) { status.textContent = 'O navegador bloqueou a reprodução automática; tente novamente.'; }
+        } else video.pause();
+        updateUI();
+      });
+      seek.addEventListener('input', () => {
+        video.currentTime = Number(seek.value);
+        updateUI();
+      });
+
+      capture.addEventListener('click', () => {
+        if (!video.videoWidth || !video.videoHeight) return;
+        // Leitura e desenho síncronos: nenhuma busca de frame é feita aqui.
+        const capturedAt = video.currentTime;
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const context = canvas.getContext('2d', { alpha: false });
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        canvas.hidden = false;
+        placeholder.hidden = true;
+        timecode.textContent = formatTime(capturedAt);
+        currentTimeOut.textContent = `${capturedAt.toFixed(3)} s`;
+        durationOut.textContent = Number.isFinite(video.duration) ? `${video.duration.toFixed(3)} s` : '—';
+        dimensionsOut.textContent = `${video.videoWidth} × ${video.videoHeight}`;
+        stateOut.textContent = stateLabel();
+        presentedFrameOut.textContent = Number.isFinite(lastPresentedMediaTime) ? `${lastPresentedMediaTime.toFixed(3)} s` : 'API indisponível';
+        status.textContent = 'Frame capturado a partir do conteúdo atualmente renderizado pelo elemento <video>.';
+      });
+
+      window.addEventListener('beforeunload', () => { if (objectUrl) URL.revokeObjectURL(objectUrl); });
+    })();
+  </script>
+</body>
+</html>
+
+<!--
+  Uso: abra este arquivo no navegador e selecione um MP4 local.
+  Observação: por segurança, browsers não permitem acessar livremente arquivos locais sem seleção explícita do usuário.
+-->
