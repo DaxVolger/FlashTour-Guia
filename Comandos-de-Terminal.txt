@@ -1,9 +1,0 @@
-Comandos de terminal para enviar o arquivo index.html para o repositório do GitHub
-
-git add index.html
-git config --global user.email "daxvolger@gmail.com" (uma única vez por máquina)
-git config --global user.name "daxvolger"            (uma única vez por máquina)
-git commit -m "initial commit"
-git push -u origin main
-
-link para colar no navegador: https://daxvolger.github.io/FlashTour-Guia/
