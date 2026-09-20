@@ -6,4 +6,8 @@ git config --global user.name "daxvolger"            (uma única vez por máquin
 git commit -m "initial commit"
 git push -u origin main
 
-link para colar no navegador: https://daxvolger.github.io/FlashTour-Guia/
+endereço do repositório:
+https://github.com/faetec-dev/FlashTour-Guia
+
+link do aplicativo para colar no navegador: 
+link para colar no navegador: https://faetec-dev.github.io/FlashTour-Guia/
